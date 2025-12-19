@@ -238,7 +238,11 @@ impl ImapSession {
 
         // ==============  uid_validity has changed or is being set the first time.  ==============
 
-        let new_uid_next = new_uid_next.unwrap_or_default();
+            let mut new_uid_next = new_uid_next.unwrap_or_default();
+        
+        if old_uid_validity == 0 && old_uid_next == 0 {
+            new_uid_next = 1
+        }
         set_uid_next(context, transport_id, folder, new_uid_next).await?;
         set_uidvalidity(context, transport_id, folder, new_uid_validity).await?;
         self.new_mail = true;
