@@ -1684,16 +1684,24 @@ impl Session {
         let Some(device_token) = context.push_subscriber.device_token().await else {
             return Ok(());
         };
+        
+        let meta = self.can_metadata();
+let push = self.can_push();
+                    warn!(context, "推送测试can_metadata:{meta} can_push:{push}");
+                    warn!(context, "推送测试Token:{device_token}");
+                    
 
         if self.can_metadata() && self.can_push() {
             let old_encrypted_device_token =
                 context.get_config(Config::EncryptedDeviceToken).await?;
 
             // Whether we need to update encrypted device token.
-            let device_token_changed = old_encrypted_device_token.is_none()
+            let mut device_token_changed = old_encrypted_device_token.is_none()
                 || context.get_config(Config::DeviceToken).await?.as_ref() != Some(&device_token);
+warn!(context, "推送测试old_encrypted_device_token:{old_encrypted_device_token:?}");
 
             let new_encrypted_device_token;
+                        warn!(context, "推送测试device_token_changed:{device_token_changed}");
             if device_token_changed {
                 let encrypted_device_token = encrypt_device_token(&device_token)
                     .context("Failed to encrypt device token")?;
@@ -1751,6 +1759,7 @@ impl Session {
                 ))
                 .await
                 .context("SETMETADATA command failed")?;
+            warn!(context, "推送测试Token:{encrypted_device_token}");
 
                 context.push_subscribed.store(true, Ordering::Relaxed);
             }
