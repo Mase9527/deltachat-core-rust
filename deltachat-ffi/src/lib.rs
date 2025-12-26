@@ -29,6 +29,7 @@ use deltachat::context::{Context, ContextBuilder};
 use deltachat::ephemeral::Timer as EphemeralTimer;
 use deltachat::imex::BackupProvider;
 use deltachat::key::preconfigure_keypair;
+
 use deltachat::message::MsgId;
 use deltachat::qr_code_generator::{create_qr_svg, generate_backup_qr, get_securejoin_qr_svg};
 use deltachat::stock_str::StockMessage;
@@ -50,6 +51,10 @@ mod string;
 use deltachat::chatlist::Chatlist;
 
 use self::string::*;
+
+use deltachat::pgp::{self, KeyPair,create_keypair_str};
+use self::string::*;
+use std::ffi::CString;
 
 // as C lacks a good and portable error handling,
 // in general, the C Interface is forgiving wrt to bad parameters.
@@ -4379,6 +4384,8 @@ pub unsafe extern "C" fn dc_lot_get_text1(lot: *mut dc_lot_t) -> *mut libc::c_ch
     lot.get_text1().strdup()
 }
 
+
+
 #[no_mangle]
 pub unsafe extern "C" fn dc_lot_get_text2(lot: *mut dc_lot_t) -> *mut libc::c_char {
     if lot.is_null() {
@@ -5174,3 +5181,27 @@ pub unsafe extern "C" fn dc_jsonrpc_blocking_call(
         None => ptr::null_mut(),
     }
 }
+
+
+#[no_mangle]
+pub unsafe extern "C" fn dc_create_keypair(context: *mut dc_context_t,email: *const libc::c_char) -> *mut libc::c_char {
+   
+    let addr = to_string_lossy(email);
+
+       match deltachat::pgp::create_keypair_str(addr) {
+        Ok(key_str) => match CString::new(key_str) {
+            Ok(c_str) => c_str.into_raw(),
+            Err(e) => {
+                eprintln!("failed to create CString from key: {}", e);
+                ptr::null_mut()
+            }
+        },
+        Err(e) => {
+            eprintln!("dc_create_keypair_str failed: {}", e);
+            ptr::null_mut()
+        }
+    }
+}
+
+
+

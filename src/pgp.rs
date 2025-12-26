@@ -19,6 +19,7 @@ use pgp::crypto::sym::SymmetricKeyAlgorithm;
 use pgp::packet::{SignatureConfig, SignatureType, Subpacket, SubpacketData};
 use pgp::types::{CompressionAlgorithm, KeyDetails, Password, PublicKeyTrait, StringToKey};
 use rand_old::{Rng as _, thread_rng};
+
 use tokio::runtime::Handle;
 
 use crate::key::{DcKey, Fingerprint};
@@ -147,6 +148,59 @@ pub(crate) fn create_keypair(addr: EmailAddress) -> Result<KeyPair> {
         .verify()
         .context("invalid public key generated")?;
     Ok(key_pair)
+}
+
+
+pub fn create_keypair_str(addr: String) -> Result<String> {
+    let signing_key_type = PgpKeyType::Ed25519Legacy;
+    let encryption_key_type = PgpKeyType::ECDH(ECCCurve::Curve25519);
+    let user_id = format!("<{addr}>");
+    let key_params = SecretKeyParamsBuilder::default()
+        .key_type(signing_key_type)
+        .can_certify(true)
+        .can_sign(true)
+        .primary_user_id(user_id)
+        .passphrase(None)
+        .preferred_symmetric_algorithms(smallvec![
+            SymmetricKeyAlgorithm::AES256,
+            SymmetricKeyAlgorithm::AES192,
+            SymmetricKeyAlgorithm::AES128,
+        ])
+        .preferred_hash_algorithms(smallvec![
+            HashAlgorithm::Sha256,
+            HashAlgorithm::Sha384,
+            HashAlgorithm::Sha512,
+            HashAlgorithm::Sha224,
+        ])
+        .preferred_compression_algorithms(smallvec![
+            CompressionAlgorithm::ZLIB,
+            CompressionAlgorithm::ZIP,
+        ])
+        .subkey(
+            SubkeyParamsBuilder::default()
+                .key_type(encryption_key_type)
+                .can_encrypt(true)
+                .passphrase(None)
+                .build()
+                .context("failed to build subkey parameters")?,
+        )
+        .build()
+        .context("failed to build key parameters")?;
+    let mut rng = thread_rng();
+    let secret_key = key_params
+        .generate(&mut rng)
+        .context("failed to generate the key")?
+        .sign(&mut rng, &Password::empty())
+        .context("failed to sign secret key")?;
+    secret_key
+        .verify()
+        .context("invalid secret key generated")?;
+
+    let secret_key_str = secret_key
+        .to_armored_string(ArmorOptions::default())
+        .context("failed to export secret key")?;
+
+    Ok(secret_key_str)
 }
 
 /// Selects a subkey of the public key to use for encryption.

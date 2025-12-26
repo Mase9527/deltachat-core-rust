@@ -5481,6 +5481,8 @@ void            dc_lot_unref             (dc_lot_t* lot);
 char*           dc_lot_get_text1         (const dc_lot_t* lot);
 
 
+
+
 /**
  * Get second string. The meaning of the string is defined by the creator of the object.
  *
@@ -6445,6 +6447,8 @@ void dc_event_unref(dc_event_t* event);
  */
 #define DC_EVENT_CONTACTS_CHANGED         2030
 
+
+char*           dc_create_keypair         (dc_context_t* context,const char* email);
 
 
 /**
