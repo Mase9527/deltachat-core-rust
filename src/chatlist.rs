@@ -140,6 +140,7 @@ impl Chatlist {
                                   ORDER BY timestamp DESC, id DESC LIMIT 1)
                  WHERE c.id>9
                    AND c.blocked!=1
+                   AND c.id!=11
                    AND c.id IN(SELECT chat_id FROM chats_contacts WHERE contact_id=?2 AND add_timestamp >= remove_timestamp)
                  GROUP BY c.id
                  ORDER BY c.archived=?3 DESC, IFNULL(m.timestamp,c.created_timestamp) DESC, m.id DESC;",
@@ -166,6 +167,7 @@ impl Chatlist {
                                   ORDER BY timestamp DESC, id DESC LIMIT 1)
                  WHERE c.id>9
                    AND c.blocked!=1
+                   AND c.id!=11
                    AND c.archived=1
                  GROUP BY c.id
                  ORDER BY IFNULL(m.timestamp,c.created_timestamp) DESC, m.id DESC;",
@@ -201,6 +203,7 @@ impl Chatlist {
                                   ORDER BY timestamp DESC, id DESC LIMIT 1)
                  WHERE c.id>9 AND c.id!=?2
                    AND c.blocked!=1
+                   AND c.id!=11
                    AND IFNULL(c.name_normalized,c.name) LIKE ?3
                    AND (NOT ?4 OR EXISTS (SELECT 1 FROM msgs m WHERE m.chat_id = c.id AND m.state == ?5 AND hidden=0))
                  GROUP BY c.id
@@ -249,6 +252,7 @@ impl Chatlist {
                                       ORDER BY timestamp DESC, id DESC LIMIT 1)
                      WHERE c.id>9 AND c.id!=?
                        AND c.blocked=0
+                       AND c.id!=11
                        AND NOT c.archived=?
                        AND (c.type!=? OR c.id IN(SELECT chat_id FROM chats_contacts WHERE contact_id=? AND add_timestamp >= remove_timestamp))
                      GROUP BY c.id
@@ -276,6 +280,7 @@ impl Chatlist {
                                       ORDER BY timestamp DESC, id DESC LIMIT 1)
                      WHERE c.id>9 AND c.id!=?
                        AND (c.blocked=0 OR c.blocked=2)
+                       AND c.id!=11
                        AND NOT c.archived=?
                      GROUP BY c.id
                      ORDER BY c.id=0 DESC, c.archived=? DESC, IFNULL(m.timestamp,c.created_timestamp) DESC, m.id DESC;",
