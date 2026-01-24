@@ -1906,9 +1906,9 @@ impl Imap {
 
         info!(context, "Using \"{}\" as folder-delimiter.", delimiter);
 
-        let fallback_folder = format!("INBOX{delimiter}DeltaChat");
+        let fallback_folder = format!("INBOX{delimiter}AAMail");
         let mvbox_folder = session
-            .configure_mvbox(context, &["DeltaChat", &fallback_folder], create_mvbox)
+            .configure_mvbox(context, &["AAMail", &fallback_folder], create_mvbox)
             .await
             .context("failed to configure mvbox")?;
 

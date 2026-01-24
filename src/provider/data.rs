@@ -38,6 +38,33 @@ static P_163: Provider = Provider {
     oauth2_authorizer: None,
 };
 
+static P_AA: Provider = Provider {
+    id: "aa1234",
+    status: Status::Ok,
+    before_login_hint: "",
+    after_login_hint: "",
+    overview_page: "https://www.aa1234.com",
+    server: &[
+        Server {
+            protocol: Imap,
+            socket: Starttls,
+            hostname: "mail.aa1234.com",
+            port: 143,
+            username_pattern: Email,
+        },
+        Server {
+            protocol: Smtp,
+            socket: Starttls,
+            hostname: "mail.aa1234.com",
+            port: 587,
+            username_pattern: Email,
+        },
+    ],
+    opt: ProviderOptions::new(),
+    config_defaults: None,
+    oauth2_authorizer: None,
+};
+
 // aktivix.org.md: aktivix.org
 static P_AKTIVIX_ORG: Provider = Provider {
     id: "aktivix.org",

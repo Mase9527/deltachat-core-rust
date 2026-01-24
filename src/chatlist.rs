@@ -16,6 +16,7 @@ use crate::param::{Param, Params};
 use crate::stock_str;
 use crate::summary::Summary;
 use crate::tools::IsNoneOrEmpty;
+use futures::future;
 
 /// Regex to find out if a query should filter by unread messages.
 pub static IS_UNREAD_FILTER: LazyLock<regex::Regex> =
@@ -297,7 +298,24 @@ impl Chatlist {
             ids
         };
 
+// 1. 并行加载 Chat 对象并判断加密状态
+/*
+        let filtered_results = future::join_all(ids.into_iter().map(|(chat_id, msg_id)| async move {
+            if let Ok(chat) = Chat::load_from_db(context, chat_id).await {
+                // 调用你指定的异步判断方法
+                if let Ok(false) = chat.is_encrypted(context).await {
+                    return Some((chat_id, msg_id));
+                }
+            }
+            None
+        })).await;
+
+        // 2. 收集所有为 Some 的结果
+        let ids: Vec<(ChatId, Option<MsgId>)> = filtered_results.into_iter().flatten().collect();
+*/
         Ok(Chatlist { ids })
+
+       // Ok(Chatlist { ids })
     }
 
     /// Converts list of chat IDs to a chatlist.
