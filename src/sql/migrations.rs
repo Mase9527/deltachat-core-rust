@@ -1466,6 +1466,21 @@ ALTER TABLE contacts ADD COLUMN name_normalized TEXT;
         .await?;
     }
 
+
+    inc_and_check(&mut migration_version, 144)?;
+    if dbversion < migration_version {
+        sql.execute_migration(
+            r#"CREATE TABLE self_key_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                fingerprint TEXT NOT NULL UNIQUE,
+                public_key BLOB,
+                first_seen INTEGER DEFAULT 0
+            ) STRICT;"#,
+            migration_version,
+        )
+        .await?;
+    }
+    
     let new_version = sql
         .get_raw_config_int(VERSION_CFG)
         .await?

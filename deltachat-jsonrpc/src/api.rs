@@ -1735,6 +1735,18 @@ impl CommandApi {
             .collect())
     }
 
+
+// 遵循规范后的版本
+async fn select_self_key_history(&self, account_id: u32) -> Result<String> {
+    // 如果 ctx 后面用不到，直接 await? 即可
+   let ctx = self.get_context(account_id).await?;
+   let json_result = ctx.get_self_key_history_json().await?;
+Ok(json_result)
+    // 手动转换以提高代码可读性，或者直接返回
+//Ok(r#"{"code": 200, "msg": "测试一下"}"#.to_string())
+}
+
+
     /// Imports contacts from a vCard.
     ///
     /// Returns the ids of created/modified contacts in the order they appear in the vCard.

@@ -44,10 +44,9 @@ use crate::stats::STATISTICS_BOT_EMAIL;
 use crate::stock_str;
 use crate::sync::Sync::*;
 use crate::tools::{
-    self, buf_compress, normalize_text, remove_subject_prefix, validate_broadcast_secret,
+    self, buf_compress, normalize_text, remove_subject_prefix, validate_broadcast_secret,time,SystemTime,
 };
 use crate::{chatlist_events, ensure_and_debug_assert, ensure_and_debug_assert_eq, location};
-
 /// This is the struct that is returned after receiving one email (aka MIME message).
 ///
 /// One email with multiple attachments can end up as multiple chat messages, but they
@@ -838,7 +837,29 @@ pub(crate) async fn receive_imf_inner(
 
     if let Some(ref sync_items) = mime_parser.sync_items {
         if from_id == ContactId::SELF {
+
+        let now = SystemTime::now();
+        let now_ts = now
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs() as i64;
+
+            info!(context, "测试保存公钥1");
+
+                if let Some(fingerprint) = &mime_parser.autocrypt_fingerprint {
+                // 插入新表（指纹冲突则忽略）
+                            info!(context, "测试保存公钥2:{fingerprint}");
+
+                context.sql.execute(
+                    "INSERT INTO self_key_history (fingerprint, first_seen)
+                     VALUES (?, ?)
+                     ON CONFLICT (fingerprint) DO NOTHING",
+                    (fingerprint, now_ts),
+                ).await?;
+            }
+            
             if mime_parser.was_encrypted() {
+        
                 // Receiving encrypted message from self updates primary transport.
                 let from_addr = &mime_parser.from.addr;
 

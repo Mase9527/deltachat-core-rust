@@ -965,6 +965,41 @@ pub unsafe extern "C" fn dc_get_chatlist(
 }
 
 #[no_mangle]
+pub unsafe extern "C" fn dc_get_unencryptedChatlist(
+    context: *mut dc_context_t,
+    flags: libc::c_int,
+    query_str: *const libc::c_char,
+    query_id: u32,
+) -> *mut dc_chatlist_t {
+    if context.is_null() {
+        eprintln!("ignoring careless call to dc_get_unencryptedChatlist()");
+        return ptr::null_mut();
+    }
+    let ctx = &*context;
+    let qs = to_opt_string_lossy(query_str);
+
+    let qi = if query_id == 0 {
+        None
+    } else {
+        Some(ContactId::new(query_id))
+    };
+
+    block_on(async move {
+        match chatlist::Chatlist::try_loadUnencrypted(ctx, flags as usize, qs.as_deref(), qi)
+            .await
+            .context("Failed to get chatlist")
+            .log_err(ctx)
+        {
+            Ok(list) => {
+                let ffi_list = ChatlistWrapper { context, list };
+                Box::into_raw(Box::new(ffi_list))
+            }
+            Err(_) => ptr::null_mut(),
+        }
+    })
+}
+
+#[no_mangle]
 pub unsafe extern "C" fn dc_create_chat_by_contact_id(
     context: *mut dc_context_t,
     contact_id: u32,

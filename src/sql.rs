@@ -659,6 +659,8 @@ impl Sql {
     pub fn config_cache(&self) -> &RwLock<HashMap<String, Option<String>>> {
         &self.config_cache
     }
+    
+ 
 
     /// Runs a checkpoint operation in TRUNCATE mode, so the WAL file is truncated to 0 bytes.
     pub(crate) async fn wal_checkpoint(context: &Context) -> Result<()> {

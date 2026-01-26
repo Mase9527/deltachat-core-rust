@@ -911,6 +911,7 @@ int             dc_preconfigure_keypair        (dc_context_t* context, const cha
  */
 dc_chatlist_t*  dc_get_chatlist              (dc_context_t* context, int flags, const char* query_str, uint32_t query_id);
 
+dc_chatlist_t*  dc_get_unencryptedChatlist              (dc_context_t* context, int flags, const char* query_str, uint32_t query_id);
 
 // handle chats
 

@@ -299,7 +299,234 @@ impl Chatlist {
         };
 
 // 1. 并行加载 Chat 对象并判断加密状态
-/*
+
+        let filtered_results = future::join_all(ids.into_iter().map(|(chat_id, msg_id)| async move {
+            if let Ok(chat) = Chat::load_from_db(context, chat_id).await {
+                // 调用你指定的异步判断方法
+                if let Ok(true) = chat.is_encrypted(context).await {
+                    return Some((chat_id, msg_id));
+                }
+            }
+            None
+        })).await;
+
+        // 2. 收集所有为 Some 的结果
+        let ids: Vec<(ChatId, Option<MsgId>)> = filtered_results.into_iter().flatten().collect();
+
+        Ok(Chatlist { ids })
+
+       // Ok(Chatlist { ids })
+    }
+    
+        pub async fn try_loadUnencrypted(
+        context: &Context,
+        listflags: usize,
+        query: Option<&str>,
+        query_contact_id: Option<ContactId>,
+    ) -> Result<Self> {
+        let flag_archived_only = 0 != listflags & DC_GCL_ARCHIVED_ONLY;
+        let flag_for_forwarding = 0 != listflags & DC_GCL_FOR_FORWARDING;
+        let flag_no_specials = 0 != listflags & DC_GCL_NO_SPECIALS;
+        let flag_add_alldone_hint = 0 != listflags & DC_GCL_ADD_ALLDONE_HINT;
+
+        let process_row = |row: &rusqlite::Row| {
+            let chat_id: ChatId = row.get(0)?;
+            let msg_id: Option<MsgId> = row.get(1)?;
+            Ok((chat_id, msg_id))
+        };
+
+        let skip_id = if flag_for_forwarding {
+            ChatId::lookup_by_contact(context, ContactId::DEVICE)
+                .await?
+                .unwrap_or_default()
+        } else {
+            ChatId::new(0)
+        };
+
+        // select with left join and minimum:
+        //
+        // - the inner select must use `hidden` and _not_ `m.hidden`
+        //   which would refer the outer select and take a lot of time
+        // - `GROUP BY` is needed several messages may have the same
+        //   timestamp
+        // - the list starts with the newest chats
+        //
+        // The query shows messages from blocked contacts in
+        // groups. Otherwise it would be hard to follow conversations.
+        let ids = if let Some(query_contact_id) = query_contact_id {
+            // show chats shared with a given contact
+            context.sql.query_map_vec(
+                "SELECT c.id, m.id
+                 FROM chats c
+                 LEFT JOIN msgs m
+                        ON c.id=m.chat_id
+                       AND m.id=(
+                               SELECT id
+                                 FROM msgs
+                                WHERE chat_id=c.id
+                                  AND (hidden=0 OR state=?1)
+                                  ORDER BY timestamp DESC, id DESC LIMIT 1)
+                 WHERE c.id>9
+                   AND c.blocked!=1
+                   AND c.id!=11
+                   AND c.id IN(SELECT chat_id FROM chats_contacts WHERE contact_id=?2 AND add_timestamp >= remove_timestamp)
+                 GROUP BY c.id
+                 ORDER BY c.archived=?3 DESC, IFNULL(m.timestamp,c.created_timestamp) DESC, m.id DESC;",
+                (MessageState::OutDraft, query_contact_id, ChatVisibility::Pinned),
+                process_row,
+            ).await?
+        } else if flag_archived_only {
+            // show archived chats
+            // (this includes the archived device-chat; we could skip it,
+            // however, then the number of archived chats do not match, which might be even more irritating.
+            // and adapting the number requires larger refactorings and seems not to be worth the effort)
+            context
+                .sql
+                .query_map_vec(
+                    "SELECT c.id, m.id
+                 FROM chats c
+                 LEFT JOIN msgs m
+                        ON c.id=m.chat_id
+                       AND m.id=(
+                               SELECT id
+                                 FROM msgs
+                                WHERE chat_id=c.id
+                                  AND (hidden=0 OR state=?)
+                                  ORDER BY timestamp DESC, id DESC LIMIT 1)
+                 WHERE c.id>9
+                   AND c.blocked!=1
+                   AND c.id!=11
+                   AND c.archived=1
+                 GROUP BY c.id
+                 ORDER BY IFNULL(m.timestamp,c.created_timestamp) DESC, m.id DESC;",
+                    (MessageState::OutDraft,),
+                    process_row,
+                )
+                .await?
+        } else if let Some(query) = query {
+            let mut query = query.trim().to_string();
+            ensure!(!query.is_empty(), "query mustn't be empty");
+            let only_unread = IS_UNREAD_FILTER.find(&query).is_some();
+            query = IS_UNREAD_FILTER.replace(&query, "").trim().to_string();
+
+            // allow searching over special names that may change at any time
+            // when the ui calls set_stock_translation()
+            if let Err(err) = update_special_chat_names(context).await {
+                warn!(context, "Cannot update special chat names: {err:#}.")
+            }
+
+            let str_like_cmd = format!("%{}%", query.to_lowercase());
+            context
+                .sql
+                .query_map_vec(
+                    "SELECT c.id, m.id
+                 FROM chats c
+                 LEFT JOIN msgs m
+                        ON c.id=m.chat_id
+                       AND m.id=(
+                               SELECT id
+                                 FROM msgs
+                                WHERE chat_id=c.id
+                                  AND (hidden=0 OR state=?1)
+                                  ORDER BY timestamp DESC, id DESC LIMIT 1)
+                 WHERE c.id>9 AND c.id!=?2
+                   AND c.blocked!=1
+                   AND c.id!=11
+                   AND IFNULL(c.name_normalized,c.name) LIKE ?3
+                   AND (NOT ?4 OR EXISTS (SELECT 1 FROM msgs m WHERE m.chat_id = c.id AND m.state == ?5 AND hidden=0))
+                 GROUP BY c.id
+                 ORDER BY IFNULL(m.timestamp,c.created_timestamp) DESC, m.id DESC;",
+                    (MessageState::OutDraft, skip_id, str_like_cmd, only_unread, MessageState::InFresh),
+                    process_row,
+                )
+                .await?
+        } else {
+            let mut ids = if flag_for_forwarding {
+                let sort_id_up = ChatId::lookup_by_contact(context, ContactId::SELF)
+                    .await?
+                    .unwrap_or_default();
+                let process_row = |row: &rusqlite::Row| {
+                    let chat_id: ChatId = row.get(0)?;
+                    let typ: Chattype = row.get(1)?;
+                    let param: Params = row.get::<_, String>(2)?.parse().unwrap_or_default();
+                    let msg_id: Option<MsgId> = row.get(3)?;
+                    Ok((chat_id, typ, param, msg_id))
+                };
+                let process_rows = |rows: rusqlite::AndThenRows<_>| {
+                    rows.filter_map(|row: std::result::Result<(_, _, Params, _), _>| match row {
+                        Ok((chat_id, typ, param, msg_id)) => {
+                            if typ == Chattype::Mailinglist
+                                && param.get(Param::ListPost).is_none_or_empty()
+                            {
+                                None
+                            } else {
+                                Some(Ok((chat_id, msg_id)))
+                            }
+                        }
+                        Err(e) => Some(Err(e)),
+                    })
+                    .collect::<std::result::Result<Vec<_>, _>>()
+                };
+                context.sql.query_map(
+                    "SELECT c.id, c.type, c.param, m.id
+                     FROM chats c
+                     LEFT JOIN msgs m
+                            ON c.id=m.chat_id
+                           AND m.id=(
+                                   SELECT id
+                                     FROM msgs
+                                    WHERE chat_id=c.id
+                                      AND (hidden=0 OR state=?)
+                                      ORDER BY timestamp DESC, id DESC LIMIT 1)
+                     WHERE c.id>9 AND c.id!=?
+                       AND c.blocked=0
+                       AND c.id!=11
+                       AND NOT c.archived=?
+                       AND (c.type!=? OR c.id IN(SELECT chat_id FROM chats_contacts WHERE contact_id=? AND add_timestamp >= remove_timestamp))
+                     GROUP BY c.id
+                     ORDER BY c.id=? DESC, c.archived=? DESC, IFNULL(m.timestamp,c.created_timestamp) DESC, m.id DESC;",
+                    (
+                        MessageState::OutDraft, skip_id, ChatVisibility::Archived,
+                        Chattype::Group, ContactId::SELF,
+                        sort_id_up, ChatVisibility::Pinned,
+                    ),
+                    process_row,
+                    process_rows,
+                ).await?
+            } else {
+                //  show normal chatlist
+                context.sql.query_map_vec(
+                    "SELECT c.id, m.id
+                     FROM chats c
+                     LEFT JOIN msgs m
+                            ON c.id=m.chat_id
+                           AND m.id=(
+                                   SELECT id
+                                     FROM msgs
+                                    WHERE chat_id=c.id
+                                      AND (hidden=0 OR state=?)
+                                      ORDER BY timestamp DESC, id DESC LIMIT 1)
+                     WHERE c.id>9 AND c.id!=?
+                       AND (c.blocked=0 OR c.blocked=2)
+                       AND c.id!=11
+                       AND NOT c.archived=?
+                     GROUP BY c.id
+                     ORDER BY c.id=0 DESC, c.archived=? DESC, IFNULL(m.timestamp,c.created_timestamp) DESC, m.id DESC;",
+                    (MessageState::OutDraft, skip_id, ChatVisibility::Archived, ChatVisibility::Pinned),
+                    process_row,
+                ).await?
+            };
+            if !flag_no_specials && get_archived_cnt(context).await? > 0 {
+                if ids.is_empty() && flag_add_alldone_hint {
+                    ids.push((DC_CHAT_ID_ALLDONE_HINT, None));
+                }
+                ids.insert(0, (DC_CHAT_ID_ARCHIVED_LINK, None));
+            }
+            ids
+        };
+
+// 1. 并行加载 Chat 对象并判断加密状态
+
         let filtered_results = future::join_all(ids.into_iter().map(|(chat_id, msg_id)| async move {
             if let Ok(chat) = Chat::load_from_db(context, chat_id).await {
                 // 调用你指定的异步判断方法
@@ -312,7 +539,7 @@ impl Chatlist {
 
         // 2. 收集所有为 Some 的结果
         let ids: Vec<(ChatId, Option<MsgId>)> = filtered_results.into_iter().flatten().collect();
-*/
+
         Ok(Chatlist { ids })
 
        // Ok(Chatlist { ids })

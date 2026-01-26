@@ -71,6 +71,12 @@ pub struct ContextBuilder {
     push_subscriber: Option<PushSubscriber>,
 }
 
+#[derive(Debug, serde::Serialize)] // 如果需要转 JSON，加上 Serialize
+pub struct KeyHistoryEntry {
+    pub fingerprint: String,
+    pub first_used: String,
+}
+
 impl ContextBuilder {
     /// Create the builder using the given database file.
     ///
@@ -1332,6 +1338,33 @@ impl Context {
         wal_fname.push("-wal");
         dbfile.with_file_name(wal_fname)
     }
+    
+    // 在 context.rs 中
+pub async fn get_self_key_history_count(&self) -> Result<usize> {
+    self.sql.count("SELECT COUNT(*) FROM self_key_history", []).await
+}
+
+pub async fn get_self_key_history_json(&self) -> Result<String> {
+        let sql = "SELECT fingerprint, datetime(first_seen, 'unixepoch', 'localtime') \
+                   FROM self_key_history \
+                   ORDER BY first_seen ASC;";
+
+        // 直接调用 sql 成员的 query_map_vec 方法
+        let history = self.sql.query_map_vec(
+            sql,
+            [], // 无参数
+            |row| {
+                Ok(KeyHistoryEntry {
+                    fingerprint: row.get(0)?,
+                    first_used: row.get(1)?,
+                })
+            }
+        ).await?;
+
+        // 将结果转换为 JSON 字符串返回
+        serde_json::to_string(&history).context("Failed to serialize key history")
+    }
+ 
 }
 
 #[cfg(test)]

@@ -654,6 +654,7 @@ async fn import_self_keys(context: &Context, path: &Path) -> Result<()> {
     Ok(())
 }
 
+
 async fn export_self_keys(context: &Context, dir: &Path) -> Result<()> {
     let mut export_errors = 0;
 

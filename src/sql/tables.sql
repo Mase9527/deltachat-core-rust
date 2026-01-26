@@ -195,3 +195,10 @@ CREATE TABLE devmsglabels (
     msg_id INTEGER DEFAULT 0
 );
 CREATE INDEX devmsglabels_index1 ON devmsglabels (label);
+
+CREATE TABLE self_key_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    fingerprint TEXT NOT NULL UNIQUE,  -- 公钥指纹（去重）
+    public_key BLOB,                    -- 备选：存储完整公钥
+    first_seen INTEGER DEFAULT 0        -- 首次使用时间戳
+) STRICT;
